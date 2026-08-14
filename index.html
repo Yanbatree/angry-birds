@@ -815,6 +815,108 @@ const LEVELS=[
      wb.pig(700,GROUND_Y-15);
      wb.pig(1100,GROUND_Y-15);
    }},
+  {name:'第 11 关 · 双子堡垒', birds:['terence','bomb','matilda','chuck','hal','red'],
+   build(){
+     wb.block('stone',750,GROUND_Y-65,20,130);      // 左堡垒
+     wb.block('stone',850,GROUND_Y-65,20,130);
+     wb.block('stone',800,GROUND_Y-142,140,24);
+     wb.pig(800,GROUND_Y-15);
+     wb.pig(800,GROUND_Y-168,14);
+     wb.block('glass',735,GROUND_Y-174,40,40);      // 屋顶玻璃（避开小猪）
+     wb.block('stone',1000,GROUND_Y-70,24,140);     // 右堡垒（加宽立柱与屋顶）
+     wb.block('stone',1100,GROUND_Y-70,24,140);
+     wb.block('stone',1050,GROUND_Y-152,160,24);
+     wb.pig(1050,GROUND_Y-15);
+     wb.pig(1020,GROUND_Y-178,14);                 // 屋顶小猪（与木柱错开）
+     wb.block('wood',1070,GROUND_Y-186,18,44);     // 右堡屋顶矮壮木柱
+     wb.pig(1070,GROUND_Y-220,12);
+     wb.pig(900,GROUND_Y-15);                        // 中间空地
+     wb.pig(950,GROUND_Y-15);
+     wb.block('wood',920,GROUND_Y-35,14,70);        // 中墙
+     wb.block('wood',920,GROUND_Y-78,90,16);
+     wb.pig(920,GROUND_Y-100,14);
+   }},
+  {name:'第 12 关 · 玻璃长桥', birds:['matilda','hal','blue','pink','chuck','red','bomb'],
+   build(){
+     wb.block('wood',760,GROUND_Y-50,16,100);       // 三柱长桥
+     wb.block('wood',880,GROUND_Y-50,16,100);
+     wb.block('wood',1000,GROUND_Y-50,16,100);
+     wb.block('wood',880,GROUND_Y-108,300,16);      // 长桥板
+     wb.block('glass',790,GROUND_Y-136,40,40);      // 桥上玻璃哨塔 ×2（对称配平）
+     wb.pig(790,GROUND_Y-170,14);
+     wb.block('glass',970,GROUND_Y-136,40,40);
+     wb.pig(970,GROUND_Y-170,14);
+     wb.pig(880,GROUND_Y-130,14);                   // 桥中小猪
+     wb.block('wood',700,GROUND_Y-30,14,60);        // 两侧玻璃哨塔
+     wb.block('glass',700,GROUND_Y-78,36,36);
+     wb.pig(700,GROUND_Y-110,14);
+     wb.block('wood',1060,GROUND_Y-30,14,60);
+     wb.block('glass',1060,GROUND_Y-78,36,36);
+     wb.pig(1060,GROUND_Y-110,14);
+     wb.pig(820,GROUND_Y-15);
+     wb.pig(940,GROUND_Y-15);
+   }},
+  {name:'第 13 关 · 石塔高耸', birds:['terence','bomb','chuck','matilda','hal','blue','red'],
+   build(){
+     wb.block('stone',800,GROUND_Y-75,20,150);      // 双石柱
+     wb.block('stone',980,GROUND_Y-75,20,150);
+     wb.block('stone',890,GROUND_Y-161,220,22);     // 石平台
+     wb.block('wood',840,GROUND_Y-202,14,60);       // 二层木柱
+     wb.block('wood',940,GROUND_Y-202,14,60);
+     wb.block('wood',890,GROUND_Y-240,140,16);      // 二层木板
+     wb.pig(890,GROUND_Y-262,14);                   // 站二层木板顶
+     wb.pig(865,GROUND_Y-186,14);                   // 石平台小猪
+     wb.pig(915,GROUND_Y-186,14);
+     wb.pig(860,GROUND_Y-15);                        // 内部小猪
+     wb.pig(920,GROUND_Y-15);
+     wb.block('glass',790,GROUND_Y-192,40,40);      // 平台两端玻璃
+     wb.block('glass',990,GROUND_Y-192,40,40);
+     wb.pig(700,GROUND_Y-15);
+     wb.pig(1080,GROUND_Y-15);
+   }},
+  {name:'第 14 关 · 终极碉堡', birds:['terence','bomb','matilda','chuck','blue','hal','red','pink'],
+   build(){
+     wb.block('stone',770,GROUND_Y-80,24,160);      // 巨型石堡
+     wb.block('stone',1050,GROUND_Y-80,24,160);
+     wb.block('stone',910,GROUND_Y-175,340,30);     // 巨厚石顶
+     wb.pig(850,GROUND_Y-15);
+     wb.pig(970,GROUND_Y-15);
+     wb.block('stone',910,GROUND_Y-220,20,60);      // 石顶中央塔
+     wb.block('stone',910,GROUND_Y-257,60,14);
+     wb.pig(910,GROUND_Y-278,14);
+     wb.block('glass',790,GROUND_Y-212,44,44);      // 石顶玻璃
+     wb.block('glass',1030,GROUND_Y-212,44,44);
+     wb.block('wood',825,GROUND_Y-45,14,90);        // 前哨（避开内部小猪）
+     wb.block('wood',995,GROUND_Y-45,14,90);
+     wb.block('wood',910,GROUND_Y-98,180,16);
+     wb.pig(910,GROUND_Y-120,14);
+     wb.block('glass',860,GROUND_Y-126,40,40);
+     wb.block('glass',960,GROUND_Y-126,40,40);
+     wb.pig(700,GROUND_Y-15);
+     wb.pig(1120,GROUND_Y-15);
+   }},
+  {name:'第 15 关 · 空中花园', birds:['hal','matilda','blue','terence','bomb','chuck','pink','red'],
+   build(){
+     wb.block('stone',800,GROUND_Y-60,24,120);      // 双石柱
+     wb.block('stone',980,GROUND_Y-60,24,120);
+     wb.block('stone',890,GROUND_Y-130,220,20);     // 一层石平台
+     wb.block('wood',850,GROUND_Y-165,14,50);       // 二层木柱
+     wb.block('wood',930,GROUND_Y-165,14,50);
+     wb.block('wood',890,GROUND_Y-198,120,16);      // 二层木板
+     wb.pig(890,GROUND_Y-220,14);
+     wb.block('glass',800,GROUND_Y-160,40,40);      // 一层玻璃+小猪
+     wb.block('glass',980,GROUND_Y-160,40,40);
+     wb.pig(800,GROUND_Y-194,14);
+     wb.pig(980,GROUND_Y-194,14);
+     wb.pig(860,GROUND_Y-15);                        // 内部小猪
+     wb.pig(920,GROUND_Y-15);
+     wb.block('wood',720,GROUND_Y-35,14,70);        // 两侧玻璃塔
+     wb.block('glass',720,GROUND_Y-88,36,36);
+     wb.pig(720,GROUND_Y-120,14);
+     wb.block('wood',1060,GROUND_Y-35,14,70);
+     wb.block('glass',1060,GROUND_Y-88,36,36);
+     wb.pig(1060,GROUND_Y-120,14);
+   }},
 ];
 function endlessBirds(){
   const pool=['red','chuck','blue','bomb'];
