@@ -161,7 +161,7 @@ const sBreak=()=>noise(0.16,0.3,2600);
 const sPop=()=>tone(300,760,0.13,'square',0.22);
 const sDash=()=>tone(420,1500,0.16,'sawtooth',0.16);
 const sSplit=()=>{ tone(620,1150,0.09,'square',0.15); tone(520,980,0.09,'square',0.15,0.06); };
-const sBoom=()=>{ noise(0.5,0.6,420); tone(95,38,0.45,'sine',0.5); };
+const sBoom=()=>{ noise(0.6,0.9,500); tone(110,30,0.6,'sine',0.7); tone(60,24,0.7,'triangle',0.5,0.05); };
 const sWin=()=>{ [523,659,784,1047].forEach((f,i)=>tone(f,f,0.22,'triangle',0.22,i*0.14)); };
 const sLose=()=>{ [392,330,262,196].forEach((f,i)=>tone(f,f,0.3,'triangle',0.2,i*0.18)); };
 
@@ -333,10 +333,11 @@ function resolvePair(A,B){
     B.vx+=jt*tx*B.invM; B.vy+=jt*ty*B.invM; B.va+=jt*rt2*B.invI;
   }
 }
-function kTable(victim,attacker,vtype){
+function kTable(victim,attacker,vtype,atype){
   if(attacker==='bird'){
-    if(victim==='pig') return 0.14;
-    if(victim==='block') return vtype==='stone'?0.04:0.075;   // 木头/玻璃一撞就碎，石头耐撞
+    const bb=atype==='bomb'?1.4:1;   // 炸弹鸟撞击更重
+    if(victim==='pig') return 0.14*bb;
+    if(victim==='block') return (vtype==='stone'?0.04:0.075)*bb;   // 木头/玻璃一撞就碎，石头耐撞
   }
   if(attacker==='block'){
     if(victim==='pig') return 0.10;
@@ -410,7 +411,7 @@ const BLOCK_DEF={
 function makeBird(type,x,y){
   const cfg=BIRD_CFG[type];
   const go={kind:'bird',type,state:'flying',abilityUsed:false,ended:false,age:0,stopFrames:0,flash:0,r:cfg.r,cfg};
-  go.body=new Body('circle',x,y,{r:cfg.r,mass:5,restitution:0.35,friction:0.55,gameObj:go});
+  go.body=new Body('circle',x,y,{r:cfg.r,mass:type==='bomb'?7.5:5,restitution:0.35,friction:0.55,gameObj:go});
   bodies.push(go.body);
   return go;
 }
@@ -440,7 +441,7 @@ function damageObj(g,other,j,vn){
   if(!g||!g.hp||g.hp<=0||g.dead) return false;
   let dmg=0;
   if(other){
-    const k=kTable(g.kind, other.kind, g.btype);
+    const k=kTable(g.kind, other.kind, g.btype, other.type);
     if(k) dmg=j*k;
   }else if(g.kind==='pig'&&Math.abs(vn)>160){
     // 摔到地面：高处坠落按撞击速度扣血（原版机制，坠落也会摔死）
@@ -521,16 +522,27 @@ function spawnStreak(x,y,ang){
   }
 }
 function spawnBoom(x,y){
-  for(let i=0;i<26;i++){
-    const a=rand(0,Math.PI*2), sp=rand(80,420);
-    pushP({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,size:rand(4,10),
-      color:['#ff9e2e','#ffd23e','#ff6a2a','#fff3c0'][randInt(0,3)],life:rand(0.3,0.7),max:0.7});
+  // 火球
+  for(let i=0;i<40;i++){
+    const a=rand(0,Math.PI*2), sp=rand(120,560);
+    pushP({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,size:rand(4,12),
+      color:['#ff9e2e','#ffd23e','#ff6a2a','#fff3c0'][randInt(0,3)],life:rand(0.3,0.8),max:0.8});
   }
-  for(let i=0;i<10;i++){
-    const a=rand(0,Math.PI*2), sp=rand(20,90);
-    pushP({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-60,size:rand(10,20),
-      color:'rgba(90,90,95,0.5)',life:rand(0.6,1.1),max:1.1});
+  // 浓烟
+  for(let i=0;i<14;i++){
+    const a=rand(0,Math.PI*2), sp=rand(20,110);
+    pushP({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-80,size:rand(12,26),
+      color:'rgba(70,70,75,0.5)',life:rand(0.7,1.3),max:1.3});
   }
+  // 飞溅碎屑（受重力）
+  for(let i=0;i<16;i++){
+    const a=rand(0,Math.PI*2), sp=rand(220,720);
+    pushP({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-160,size:rand(2.5,5),
+      color:['#5a3a22','#8a8f96','#c98d4e'][randInt(0,2)],life:rand(0.5,1.0),max:1.0});
+  }
+  // 冲击环
+  pushP({type:'ring',x,y,size:8,vr:1500,color:'rgba(255,210,110,0.95)',life:0.42,max:0.42});
+  pushP({type:'ring',x,y,size:4,vr:1000,color:'rgba(255,255,255,0.7)',life:0.55,max:0.55});
 }
 function addScoreText(txt,x,y,color){
   pushP({type:'text',text:txt,x,y,vx:rand(-15,15),vy:-90,size:22,color,life:1.1,max:1.1});
@@ -538,7 +550,9 @@ function addScoreText(txt,x,y,color){
 function updateParticles(dt){
   for(const p of particles){
     p.life-=dt;
-    if(p.type==='text') p.vy-=30*dt; else p.vy+=900*dt;
+    if(p.type==='text') p.vy-=30*dt;
+    else if(p.type==='ring'){ p.size+=(p.vr||0)*dt; }
+    else p.vy+=900*dt;
     p.x+=p.vx*dt; p.y+=p.vy*dt; p.rot+=(p.vr||0)*dt;
   }
   particles=particles.filter(p=>p.life>0);
@@ -645,7 +659,7 @@ let score=0, scoreBase=0;
 let queue=[], loadedBird=null, flyingBirds=[], pigs=[];
 let dragPos=null, dragging=false;
 let settleTimer=0, winTimer=0, loseTimer=0, timeScale=1;
-let shake=0, flash=0, levelName='准备中…';
+let shake=0, flash=0, slowmo=0, levelName='准备中…';
 let bannerText='', bannerTimer=0;
 
 // ===================== 进度存档（localStorage） =====================
@@ -663,7 +677,7 @@ function resetWorld(){
   particles.length=0; impacts.length=0;
   dragPos=null; dragging=false;
   state='ready';
-  shake=0; flash=0; timeScale=1; winTimer=0; loseTimer=0; settleTimer=0;
+  shake=0; flash=0; slowmo=0; timeScale=1; winTimer=0; loseTimer=0; settleTimer=0;
   makeGround();
 }
 function loadLevel(i){
@@ -817,22 +831,25 @@ function splitBird(bird){
 function explodeBird(bird){
   if(bird.abilityUsed) return;
   bird.abilityUsed=true;
-  const bx=bird.body.x, by=bird.body.y, R=150;
+  // 范围爆炸：动量级冲击波 + 按距离衰减的范围伤害
+  const bx=bird.body.x, by=bird.body.y, R=190;
   for(const bd of bodies.slice()){
     if(bd.dead||bd.isStatic||bd===bird.body) continue;
     const dx=bd.x-bx, dy=bd.y-by, d=Math.hypot(dx,dy);
     if(d<R){
-      const k=1-d/R, nx=dx/(d||1), ny=dy/(d||1);
-      bd.vx+=nx*k*640; bd.vy+=ny*k*640;
+      const k=Math.pow(1-d/R,0.8), nx=dx/(d||1), ny=dy/(d||1);
+      bd.vx+=nx*k*880;
+      bd.vy+=ny*k*880-k*260;   // 向上掀起，才有"炸飞"的感觉
       const go=bd.gameObj;
       if(go&&go.hp){
-        go.hp-=k*400; go.flash=1;
+        go.hp-=k*520; go.flash=1;
         if(go.hp<=0) destroyObj(go);
       }
     }
   }
   spawnBoom(bx,by);
-  flash=0.45; shake=18; sBoom();
+  flash=0.55; shake=24; slowmo=0.28; timeScale=0.35;
+  sBoom();
   endBird(bird,'boom');
 }
 
@@ -1165,6 +1182,9 @@ function drawParticles(){
       ctx.fillStyle=p.color;
       ctx.fillRect(-p.size/2,-p.size2/2,p.size,p.size2);
       ctx.restore();
+    }else if(p.type==='ring'){
+      ctx.strokeStyle=p.color; ctx.lineWidth=10*a;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,7); ctx.stroke();
     }else if(p.type==='text'){
       ctx.font='700 '+p.size+'px "Segoe UI","Microsoft YaHei",sans-serif';
       ctx.textAlign='center';
@@ -1219,6 +1239,7 @@ function frame(now){
     if(state==='won'&&winTimer>0){ winTimer-=dt; if(winTimer<=0) finalizeWin(); }
     if(state==='lost'&&loseTimer>0){ loseTimer-=dt; if(loseTimer<=0) showLoseOverlay(); }
     if(state==='settling'){ settleTimer-=dt; if(settleTimer<=0) nextTurn(); }
+    if(slowmo>0){ slowmo-=dt; if(slowmo<=0&&state!=='won') timeScale=1; }   // 爆炸慢动作
     acc+=dt*timeScale;
     while(acc>=FIXED){ physicsStep(FIXED); acc-=FIXED; }
     if(acc<0) acc=0;   // 防止负累积导致长时间停摆
