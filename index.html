@@ -338,8 +338,8 @@ function processImpacts(){
       if(bird&&bird.kind==='bird'&&bird.type==='bomb'&&bird.state==='flying'&&!bird.abilityUsed&&hard&&im.j>500) explodeBird(bird);
     }
     if(hard&&im.j>60){
-      damageObj(ga,gb,im.j);
-      damageObj(gb,ga,im.j);
+      damageObj(ga,gb,im.j,im.vn);
+      damageObj(gb,ga,im.j,im.vn);
       if(im.j>260) spawnDust(im.pt.x,im.pt.y, Math.min(8, Math.round(im.j*0.004)), 3);
       if(im.j>450) sThud();
     }
@@ -395,7 +395,7 @@ function makeBird(type,x,y){
   return go;
 }
 function makePig(x,y,r=15){
-  const go={kind:'pig',hp:100*(r/15),maxHp:100*(r/15),r,dead:false,flash:0};
+  const go={kind:'pig',hp:80*(r/15),maxHp:80*(r/15),r,dead:false,flash:0};
   go.body=new Body('circle',x,y,{r,mass:4,restitution:0.08,friction:0.6,gameObj:go});
   bodies.push(go.body); pigs.push(go);
   return go;
@@ -416,11 +416,16 @@ function makeGround(){
 }
 const wb={block:makeBlock,pig:makePig};
 
-function damageObj(g,other,j){
+function damageObj(g,other,j,vn){
   if(!g||!g.hp||g.hp<=0||g.dead) return;
-  const k=kTable(g.kind, other?other.kind:null);
-  if(!k) return;
-  const dmg=j*k;
+  let dmg=0;
+  if(other){
+    const k=kTable(g.kind, other.kind);
+    if(k) dmg=j*k;
+  }else if(g.kind==='pig'&&Math.abs(vn)>160){
+    // 摔到地面：高处坠落按撞击速度扣血（原版机制，坠落也会摔死）
+    dmg=(Math.abs(vn)-160)*0.45;
+  }
   if(dmg<1) return;
   g.hp-=dmg; g.flash=1;
   if(g.hp<=0) destroyObj(g);
