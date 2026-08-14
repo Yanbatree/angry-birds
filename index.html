@@ -46,10 +46,20 @@
   .pbtn:active{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,.22);}
   .pbtn.green{background:#58b53a;}
   .pbtn.blue{background:#3f8fd6;}
+  .pbtn.gray{background:#8d867c;}
   .hidden{display:none;}
-  #intro .panel{width:600px;}
-  #intro h1{font-size:52px;}
+  #intro .panel{width:680px;}
+  #intro h1{font-size:46px;}
   .hint{font-size:14px;color:#8a7a63;margin-top:12px;}
+  /* 选关网格 */
+  #levelGrid{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:14px 0 4px;}
+  .lvlbtn{width:106px;padding:10px 6px;border-radius:14px;border:2px solid #e8d5b5;background:#fff;cursor:pointer;text-align:center;box-shadow:0 3px 0 rgba(0,0,0,.08);transition:transform .1s;}
+  .lvlbtn .n{font-size:30px;font-weight:800;color:#c0392b;line-height:1.1;}
+  .lvlbtn .s{color:#f5b301;font-size:13px;letter-spacing:2px;min-height:16px;}
+  .lvlbtn .t{font-size:11px;color:#8a7a63;margin-top:2px;}
+  .lvlbtn.locked{opacity:.45;cursor:not-allowed;filter:grayscale(1);}
+  .lvlbtn:not(.locked):hover{transform:translateY(-3px);background:#fffbe8;}
+  .lvlbtn.endless{background:#fff3d6;}
 </style>
 </head>
 <body>
@@ -71,6 +81,7 @@
       <div class="sub" id="ovScore"></div>
       <button class="pbtn green hidden" id="ovNext">下一关 ▶</button>
       <button class="pbtn blue hidden" id="ovRetry">↺ 重新开始</button>
+      <button class="pbtn gray hidden" id="ovMenu">选关</button>
     </div>
   </div>
   <div id="intro" class="overlay">
@@ -78,13 +89,13 @@
       <h1>愤怒的小鸟</h1>
       <div class="sub">
         拖拽弹弓发射小鸟，砸倒积木、消灭所有小猪！<br>
-        <b style="color:#c0392b">红鸟</b>：普通 &nbsp;
-        <b style="color:#d9a400">黄鸟</b>：飞行中点击=加速 &nbsp;
-        <b style="color:#3f8fd6">蓝鸟</b>：飞行中点击=分身×3 &nbsp;
-        <b style="color:#444">黑鸟</b>：飞行中点击=爆炸
+        <b style="color:#c0392b">红鸟</b>普通 ·
+        <b style="color:#d9a400">黄鸟</b>点击加速 ·
+        <b style="color:#3f8fd6">蓝鸟</b>点击分身 ·
+        <b style="color:#444">黑鸟</b>点击爆炸
       </div>
-      <button class="pbtn green" id="btnStart">开始游戏 ▶</button>
-      <div class="hint">鼠标 / 手指拖拽发射 · R 键重来 · 音效 🔊</div>
+      <div id="levelGrid"></div>
+      <div class="hint">通关解锁下一关 · 可反复刷关刷星 · R 重来 · 音效 🔊</div>
     </div>
   </div>
 </div>
@@ -246,10 +257,10 @@ function collide(a,b){
   r.nx=-r.nx; r.ny=-r.ny;
   return r;
 }
-function record(A,B,j,pt,vn=0){
+function record(A,B,j,pt,vn=0,nx=0,ny=0){
   const key=A.id<B.id? A.id+'-'+B.id : B.id+'-'+A.id;
   let im=impacts.find(x=>x.key===key);
-  if(!im){ im={key,a:A,b:B,j:0,vn:0,pt}; impacts.push(im); }
+  if(!im){ im={key,a:A,b:B,j:0,vn:0,pt,nx,ny}; impacts.push(im); }
   if(j>im.j) im.j=j;
   if(Math.abs(vn)>Math.abs(im.vn)) im.vn=vn;
 }
@@ -299,16 +310,16 @@ function resolvePair(A,B){
     let j=jImp?jImp[i]:0;
     if(!jImp){
       const vn=rvx*nx+rvy*ny;
-      if(vn>0){ record(A,B,0,pt,vn); continue; }   // 正在分离
+      if(vn>0){ record(A,B,0,pt,vn,nx,ny); continue; }   // 正在分离
       const rn1=r1x*ny-r1y*nx, rn2=r2x*ny-r2y*nx;
       const denom=inv+rn1*rn1*A.invI+rn2*rn2*B.invI;
       if(denom<=0) continue;
       j=-(1+e)*vn/denom;
       A.vx-=j*nx*A.invM; A.vy-=j*ny*A.invM; A.va-=j*rn1*A.invI;
       B.vx+=j*nx*B.invM; B.vy+=j*ny*B.invM; B.va+=j*rn2*B.invI;
-      record(A,B,j,pt,vn);
+      record(A,B,j,pt,vn,nx,ny);
     }else{
-      record(A,B,j,pt,vns0[i]);
+      record(A,B,j,pt,vns0[i],nx,ny);
     }
     // 摩擦力（以该点法向冲量为上限）
     const tx=-ny, ty=nx;
@@ -344,8 +355,11 @@ function processImpacts(){
       if(bird&&bird.kind==='bird'&&bird.type==='bomb'&&bird.state==='flying'&&!bird.abilityUsed&&hard&&im.j>500) explodeBird(bird);
     }
     if(hard&&im.j>60){
-      damageObj(ga,gb,im.j,im.vn);
-      damageObj(gb,ga,im.j,im.vn);
+      const ka=damageObj(ga,gb,im.j,im.vn);
+      const kb=damageObj(gb,ga,im.j,im.vn);
+      // 小鸟撞碎目标后保留动能，贯穿连锁
+      if(ka&&gb&&gb.kind==='bird'&&gb.state==='flying') plowThrough(gb,im);
+      if(kb&&ga&&ga.kind==='bird'&&ga.state==='flying') plowThrough(ga,im);
       if(im.j>260) spawnDust(im.pt.x,im.pt.y, Math.min(8, Math.round(im.j*0.004)), 3);
       if(im.j>450) sThud();
     }
@@ -423,7 +437,7 @@ function makeGround(){
 const wb={block:makeBlock,pig:makePig};
 
 function damageObj(g,other,j,vn){
-  if(!g||!g.hp||g.hp<=0||g.dead) return;
+  if(!g||!g.hp||g.hp<=0||g.dead) return false;
   let dmg=0;
   if(other){
     const k=kTable(g.kind, other.kind, g.btype);
@@ -432,9 +446,24 @@ function damageObj(g,other,j,vn){
     // 摔到地面：高处坠落按撞击速度扣血（原版机制，坠落也会摔死）
     dmg=(Math.abs(vn)-160)*0.45;
   }
-  if(dmg<1) return;
+  if(dmg<1) return false;
   g.hp-=dmg; g.flash=1;
-  if(g.hp<=0) destroyObj(g);
+  if(g.hp<=0){ destroyObj(g); return true; }
+  return false;
+}
+// 贯穿补偿：小鸟高速撞碎目标后保留大部分动能（原版手感，冲刺能连穿一排木板）
+function plowThrough(bird,im){
+  const b=bird.body;
+  if(Math.hypot(b.vx,b.vy)<650) return;   // 只有高速撞击（如黄鸟冲刺）才贯穿
+  const sgn=(im.a===b)?1:-1;   // A 受 -j·n，B 受 +j·n
+  const px=b.vx+sgn*im.j*im.nx*b.invM;
+  const py=b.vy+sgn*im.j*im.ny*b.invM;
+  const target=Math.hypot(px,py)*0.75;    // 保留 75% 撞击前速度
+  const cur=Math.hypot(b.vx,b.vy);
+  if(target>cur){
+    const k=target/cur;
+    b.vx*=k; b.vy*=k;
+  }
 }
 function destroyObj(g){
   if(g.dead) return;
@@ -619,6 +648,16 @@ let settleTimer=0, winTimer=0, loseTimer=0, timeScale=1;
 let shake=0, flash=0, levelName='准备中…';
 let bannerText='', bannerTimer=0;
 
+// ===================== 进度存档（localStorage） =====================
+let progress=loadProgress();
+function loadProgress(){
+  try{ return JSON.parse(localStorage.getItem('ab_progress'))||{unlocked:0,stars:{},endless:false,bestWave:0}; }
+  catch(e){ return {unlocked:0,stars:{},endless:false,bestWave:0}; }
+}
+function saveProgress(){
+  try{ localStorage.setItem('ab_progress',JSON.stringify(progress)); }catch(e){}
+}
+
 function resetWorld(){
   bodies.length=0; pigs.length=0; flyingBirds.length=0; loadedBird=null;
   particles.length=0; impacts.length=0;
@@ -690,12 +729,18 @@ function finalizeWin(){
   const bonus=queue.length*10000;
   score+=bonus;
   const stars=queue.length>=2?3:(queue.length>=1?2:1);
+  // 保存进度：解锁下一关、记录最高星级、解锁无尽模式
   if(isEndless){
+    if(endlessWave>(progress.bestWave||0)) progress.bestWave=endlessWave;
     showOverlay('第 '+endlessWave+' 波 通关！','','本波得分 +'+(score-scoreBase)+'　总分 '+score,true,'下一波 ▶','↺ 重新开始');
   }else{
+    if(levelIndex+1>progress.unlocked) progress.unlocked=levelIndex+1;
+    if((progress.stars[levelIndex]||0)<stars) progress.stars[levelIndex]=stars;
+    if(levelIndex===LEVELS.length-1) progress.endless=true;
     const done=levelIndex===LEVELS.length-1;
     showOverlay('胜利！',stars,'本关得分 +'+(score-scoreBase)+'　小鸟奖励 +'+bonus+'　总分 '+score,true,done?'无尽模式 ▶':'下一关 ▶','↺ 重新开始');
   }
+  saveProgress();
   updateHUD();
 }
 function loseLevel(){
@@ -743,7 +788,7 @@ function useAbility(){
     if(t==='chuck'){
       const b=bird.body;
       const n=Math.hypot(b.vx,b.vy)||1;
-      const sp=Math.min(Math.hypot(b.vx,b.vy)*1.85,1750);
+      const sp=clamp(Math.hypot(b.vx,b.vy)*2.2, 900, 2100);   // 加速更猛，低速时也有保底冲刺
       b.vx=b.vx/n*sp; b.vy=b.vy/n*sp;
       bird.abilityUsed=true;
       sDash(); spawnStreak(b.x,b.y,Math.atan2(b.vy,b.vx));
@@ -839,7 +884,7 @@ window.addEventListener('keydown',e=>{
 // ===================== HUD 与弹窗 =====================
 const hudScore=$('score'), hudLevel=$('level'), birdsRow=$('birdsRow'),
       overlay=$('overlay'), ovTitle=$('ovTitle'), ovStars=$('ovStars'),
-      ovScore=$('ovScore'), ovNext=$('ovNext'), ovRetry=$('ovRetry'),
+      ovScore=$('ovScore'), ovNext=$('ovNext'), ovRetry=$('ovRetry'), ovMenu=$('ovMenu'),
       intro=$('intro');
 function updateHUD(){
   hudScore.textContent='得分：'+score;
@@ -857,7 +902,33 @@ function showOverlay(title,starCount,sub,showNext,nextLabel,retryLabel){
   if(nextLabel) ovNext.textContent=nextLabel;
   ovRetry.classList.remove('hidden');
   ovRetry.textContent=retryLabel||'↺ 重新开始';
+  ovMenu.classList.remove('hidden');
   overlay.classList.remove('hidden');
+}
+function renderLevelSelect(){
+  const g=$('levelGrid');
+  let html='';
+  for(let i=0;i<LEVELS.length;i++){
+    const unlocked=i<=progress.unlocked;
+    const s=progress.stars[i]||0;
+    html+='<div class="lvlbtn'+(unlocked?'':' locked')+'" data-i="'+i+'">'
+      +'<div class="n">'+(unlocked?(i+1):'🔒')+'</div>'
+      +'<div class="s">'+'★'.repeat(s)+'☆'.repeat(3-s)+'</div>'
+      +'<div class="t">'+LEVELS[i].name.replace(/^第\s*\d+\s*关\s*·\s*/,'')+'</div>'
+      +'</div>';
+  }
+  html+='<div class="lvlbtn endless'+(progress.endless?'':' locked')+'" data-e="1">'
+    +'<div class="n">'+(progress.endless?'∞':'🔒')+'</div>'
+    +'<div class="s">&nbsp;</div>'
+    +'<div class="t">'+(progress.endless?('最高第 '+(progress.bestWave||0)+' 波'):'通关第 5 关解锁')+'</div>'
+    +'</div>';
+  g.innerHTML=html;
+}
+function showSelect(){
+  renderLevelSelect();
+  resetWorld();
+  state='intro';
+  intro.classList.remove('hidden');
 }
 function setBanner(t){ bannerText=t; bannerTimer=1.8; }
 
@@ -1181,12 +1252,23 @@ function resize(){
 }
 window.addEventListener('resize',resize); resize();
 
-$('btnStart').addEventListener('click',()=>{ ac(); intro.classList.add('hidden'); loadLevel(0); });
+$('levelGrid').addEventListener('click',e=>{
+  const b=e.target.closest('.lvlbtn'); if(!b) return;
+  ac();
+  if(b.dataset.e){
+    if(progress.endless){ intro.classList.add('hidden'); startEndless(); }
+    return;
+  }
+  const i=+b.dataset.i;
+  if(i<=progress.unlocked){ intro.classList.add('hidden'); loadLevel(i); }
+});
 $('ovNext').addEventListener('click',nextLevel);
 $('ovRetry').addEventListener('click',restart);
+$('ovMenu').addEventListener('click',()=>{ overlay.classList.add('hidden'); showSelect(); });
 $('btnRestart').addEventListener('click',()=>{ if(state==='intro') return; restart(); });
 $('btnSound').addEventListener('click',()=>{ soundOn=!soundOn; $('btnSound').textContent=soundOn?'🔊':'🔇'; });
 
+renderLevelSelect();
 requestAnimationFrame(frame);
 </script>
 </body>
