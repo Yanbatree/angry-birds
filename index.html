@@ -90,9 +90,14 @@
       <div class="sub">
         拖拽弹弓发射小鸟，砸倒积木、消灭所有小猪！<br>
         <b style="color:#c0392b">红鸟</b>普通 ·
-        <b style="color:#d9a400">黄鸟</b>点击加速 ·
-        <b style="color:#3f8fd6">蓝鸟</b>点击分身 ·
-        <b style="color:#444">黑鸟</b>点击爆炸
+        <b style="color:#d9a400">黄鸟</b>加速 ·
+        <b style="color:#3f8fd6">蓝鸟</b>分身 ·
+        <b style="color:#444">黑鸟</b>爆炸 ·
+        <b style="color:#a89f7f">白鸟</b>下蛋 ·
+        <b style="color:#58b23c">绿鸟</b>回旋 ·
+        <b style="color:#f49ac1">粉鸟</b>变气球 ·
+        <b style="color:#8c2f24">巨鸟</b>质量碾压<br>
+        <span style="font-size:13px">技能均在飞行中点击触发（白/绿/粉/黄/蓝/黑）</span>
       </div>
       <div id="levelGrid"></div>
       <div class="hint">通关解锁下一关 · 可反复刷关刷星 · R 重来 · 音效 🔊</div>
@@ -162,6 +167,10 @@ const sPop=()=>tone(300,760,0.13,'square',0.22);
 const sDash=()=>tone(420,1500,0.16,'sawtooth',0.16);
 const sSplit=()=>{ tone(620,1150,0.09,'square',0.15); tone(520,980,0.09,'square',0.15,0.06); };
 const sBoom=()=>{ noise(0.6,0.9,500); tone(110,30,0.6,'sine',0.7); tone(60,24,0.7,'triangle',0.5,0.05); };
+const sDrop=()=>tone(500,240,0.12,'square',0.15);
+const sEggBoom=()=>{ noise(0.25,0.4,1400); tone(300,80,0.25,'sine',0.4); };
+const sBoomerang=()=>{ tone(800,300,0.18,'sawtooth',0.12); tone(300,900,0.18,'sawtooth',0.12,0.08); };
+const sInflate=()=>{ tone(200,600,0.3,'triangle',0.2); noise(0.25,0.15,900); };
 const sWin=()=>{ [523,659,784,1047].forEach((f,i)=>tone(f,f,0.22,'triangle',0.22,i*0.14)); };
 const sLose=()=>{ [392,330,262,196].forEach((f,i)=>tone(f,f,0.3,'triangle',0.2,i*0.18)); };
 
@@ -335,7 +344,7 @@ function resolvePair(A,B){
 }
 function kTable(victim,attacker,vtype,atype){
   if(attacker==='bird'){
-    const bb=atype==='bomb'?1.4:1;   // 炸弹鸟撞击更重
+    const bb=atype==='bomb'?1.4:(atype==='terence'?1.6:1);   // 炸弹鸟/巨鸟撞击更重
     if(victim==='pig') return 0.14*bb;
     if(victim==='block') return (vtype==='stone'?0.055:0.075)*bb;   // 木头/玻璃一撞就碎，石头正面命中也能碎
   }
@@ -354,6 +363,10 @@ function processImpacts(){
     const hard=Math.abs(im.vn)>120;
     for(const bird of [ga,gb]){
       if(bird&&bird.kind==='bird'&&bird.type==='bomb'&&bird.state==='flying'&&!bird.abilityUsed&&hard&&im.j>500) explodeBird(bird);
+    }
+    // 鸟蛋受到猛烈撞击即爆炸
+    for(const egg of [ga,gb]){
+      if(egg&&egg.kind==='egg'&&hard&&im.j>300) eggBoom(egg);
     }
     if(hard&&im.j>60){
       const ka=damageObj(ga,gb,im.j,im.vn);
@@ -380,7 +393,8 @@ function physicsStep(dt){
     if(b.type==='circle'&&b.touching){
       b.vx*=0.988; b.vy*=0.988;
     }
-    b.vy+=GRAVITY*dt;
+    const gravScale=(go&&go.kind==='bird'&&go.inflated)?-0.2:1;   // 气球鸟上浮
+    b.vy+=GRAVITY*dt*gravScale;
     if(!(go&&go.kind==='bird')) b.vx*=0.9995;   // 鸟无空气阻力，弹道与预览完全一致
     b.x+=b.vx*dt; b.y+=b.vy*dt; b.a+=b.va*dt;
     b.touching=false;
@@ -406,6 +420,10 @@ const BIRD_CFG={
   chuck:{body:'#f6cf3a',shade:'#d8a51b',belly:'#fdf1c3',beak:'#f08c12',tail:'#7a5a10',r:16},
   blue: {body:'#4d9fe0',shade:'#3377b8',belly:'#d8ecf8',beak:'#f7a11b',tail:'#24518a',r:16},
   bomb: {body:'#383b40',shade:'#26282c',belly:'#9aa0a8',beak:'#f5c242',tail:'#232323',r:17},
+  matilda:{body:'#f2efdd',shade:'#b8b296',belly:'#ffffff',beak:'#f7a11b',tail:'#8a8572',r:17},
+  hal:  {body:'#58b23c',shade:'#3c8a28',belly:'#d3efc0',beak:'#f08c12',tail:'#2c6b1d',r:16},
+  pink: {body:'#f49ac1',shade:'#d475a2',belly:'#ffe3ee',beak:'#f7a11b',tail:'#b3577f',r:16},
+  terence:{body:'#8c2f24',shade:'#5f1d15',belly:'#b96a55',beak:'#f7a11b',tail:'#3d1410',r:22},
 };
 const BLOCK_DEF={
   wood: {fill:'#c98d4e',edge:'#8a5a2b',line:'#a9742f',dens:0.006,hpk:10},
@@ -415,7 +433,7 @@ const BLOCK_DEF={
 function makeBird(type,x,y){
   const cfg=BIRD_CFG[type];
   const go={kind:'bird',type,state:'flying',abilityUsed:false,ended:false,age:0,stopFrames:0,flash:0,r:cfg.r,cfg};
-  go.body=new Body('circle',x,y,{r:cfg.r,mass:type==='bomb'?7.5:5,restitution:0.2,friction:0.65,gameObj:go});
+  go.body=new Body('circle',x,y,{r:cfg.r,mass:type==='bomb'?7.5:(type==='terence'?12:5),restitution:0.2,friction:0.65,gameObj:go});
   bodies.push(go.body);
   return go;
 }
@@ -621,6 +639,99 @@ const LEVELS=[
      wb.pig(890,GROUND_Y-236,14);
      wb.pig(890,GROUND_Y-150,14);
    }},
+  {name:'第 6 关 · 石堡重围', birds:['red','terence','chuck','bomb','matilda'],
+   build(){
+     wb.block('stone',780,GROUND_Y-70,22,140);     // 左主柱
+     wb.block('stone',1040,GROUND_Y-70,22,140);    // 右主柱
+     wb.block('stone',910,GROUND_Y-152,320,24);    // 石顶
+     wb.pig(850,GROUND_Y-15);
+     wb.pig(970,GROUND_Y-15);
+     wb.block('wood',910,GROUND_Y-189,14,50);      // 屋顶木柱
+     wb.pig(910,GROUND_Y-226,12);
+     wb.block('glass',790,GROUND_Y-184,40,40);     // 屋顶玻璃
+     wb.block('glass',1030,GROUND_Y-184,40,40);
+     wb.pig(1030,GROUND_Y-218,14);
+     wb.block('wood',700,GROUND_Y-35,14,70);       // 左翼平台
+     wb.block('wood',745,GROUND_Y-35,14,70);
+     wb.block('wood',722,GROUND_Y-78,80,16);
+     wb.pig(722,GROUND_Y-100,14);
+     wb.block('wood',1085,GROUND_Y-35,14,70);      // 右翼平台
+     wb.block('wood',1130,GROUND_Y-35,14,70);
+     wb.block('wood',1107,GROUND_Y-78,80,16);
+     wb.pig(1107,GROUND_Y-100,14);
+   }},
+  {name:'第 7 关 · 玻璃塔林', birds:['matilda','hal','pink','blue','chuck','red'],
+   build(){
+     wb.block('wood',780,GROUND_Y-40,16,80);       // 塔A
+     wb.block('glass',780,GROUND_Y-102,44,44);
+     wb.pig(780,GROUND_Y-138,14);
+     wb.block('wood',910,GROUND_Y-55,16,110);      // 塔B（双层玻璃）
+     wb.block('glass',910,GROUND_Y-132,44,44);
+     wb.block('glass',910,GROUND_Y-176,44,44);
+     wb.pig(910,GROUND_Y-212,14);
+     wb.block('wood',1040,GROUND_Y-50,16,90);      // 塔C（三层玻璃）
+     wb.block('glass',1040,GROUND_Y-112,44,44);
+     wb.block('glass',1040,GROUND_Y-152,36,36);
+     wb.block('glass',1040,GROUND_Y-188,36,36);
+     wb.pig(1040,GROUND_Y-220,14);
+     wb.pig(820,GROUND_Y-15);
+     wb.pig(950,GROUND_Y-15);
+     wb.pig(1070,GROUND_Y-15);
+   }},
+  {name:'第 8 关 · 天空要塞', birds:['terence','hal','matilda','blue','bomb','chuck'],
+   build(){
+     wb.block('stone',800,GROUND_Y-65,20,130);     // 石柱
+     wb.block('stone',980,GROUND_Y-65,20,130);
+     wb.block('wood',890,GROUND_Y-138,240,16);     // 一层平台
+     wb.block('wood',840,GROUND_Y-181,14,70);      // 二层木柱
+     wb.block('wood',940,GROUND_Y-181,14,70);
+     wb.block('wood',890,GROUND_Y-224,140,16);     // 二层平台
+     wb.pig(890,GROUND_Y-246,14);
+     wb.pig(862,GROUND_Y-160,14);                  // 一层小猪
+     wb.pig(918,GROUND_Y-160,14);
+     wb.block('glass',800,GROUND_Y-166,40,40);     // 平台两端玻璃
+     wb.block('glass',980,GROUND_Y-166,40,40);
+     wb.pig(800,GROUND_Y-200,14);
+     wb.pig(980,GROUND_Y-200,14);
+     wb.pig(890,GROUND_Y-15);
+   }},
+  {name:'第 9 关 · 终极要塞', birds:['terence','bomb','matilda','chuck','blue','red','hal'],
+   build(){
+     wb.block('stone',760,GROUND_Y-75,24,150);     // 主柱
+     wb.block('stone',1060,GROUND_Y-75,24,150);
+     wb.block('stone',910,GROUND_Y-164,360,28);    // 巨厚石顶
+     wb.pig(850,GROUND_Y-15);
+     wb.pig(970,GROUND_Y-15);
+     wb.block('wood',910,GROUND_Y-208,16,60);      // 石顶木柱
+     wb.pig(910,GROUND_Y-252,14);
+     wb.block('glass',790,GROUND_Y-200,44,44);     // 石顶玻璃
+     wb.block('glass',1030,GROUND_Y-200,44,44);
+     wb.block('wood',840,GROUND_Y-40,14,80);       // 前哨
+     wb.block('wood',980,GROUND_Y-40,14,80);
+     wb.block('wood',910,GROUND_Y-88,200,16);
+     wb.pig(910,GROUND_Y-110,14);
+     wb.block('glass',870,GROUND_Y-116,40,40);
+     wb.pig(690,GROUND_Y-15);
+     wb.pig(1130,GROUND_Y-15);
+   }},
+  {name:'第 10 关 · 大混战', birds:['terence','matilda','pink','hal','bomb','chuck','blue','red'],
+   build(){
+     wb.block('stone',800,GROUND_Y-65,18,130);     // 主平台双柱
+     wb.block('wood',1000,GROUND_Y-65,14,130);
+     wb.block('wood',900,GROUND_Y-138,240,16);
+     wb.pig(860,GROUND_Y-160,14);
+     wb.pig(940,GROUND_Y-160,14);
+     wb.block('glass',900,GROUND_Y-166,40,40);     // 平台中央玻璃塔
+     wb.pig(900,GROUND_Y-200,14);
+     wb.block('wood',750,GROUND_Y-30,14,60);       // 左侧塔
+     wb.block('glass',750,GROUND_Y-78,36,36);
+     wb.pig(750,GROUND_Y-110,14);
+     wb.block('wood',1050,GROUND_Y-30,14,60);      // 右侧塔
+     wb.block('glass',1050,GROUND_Y-78,36,36);
+     wb.pig(1050,GROUND_Y-110,14);
+     wb.pig(700,GROUND_Y-15);
+     wb.pig(1100,GROUND_Y-15);
+   }},
 ];
 function endlessBirds(){
   const pool=['red','chuck','blue','bomb'];
@@ -731,7 +842,7 @@ function endBird(bird,reason){
   bird.ended=true;
   if(bird.body) bird.body.dead=true;
   const i=flyingBirds.indexOf(bird); if(i>=0) flyingBirds.splice(i,1);
-  if((reason==='stop'||reason==='out')&&bird.body) spawnFeathers(bird.body.x,bird.body.y,bird.cfg);
+  if((reason==='stop'||reason==='out'||reason==='pop')&&bird.body) spawnFeathers(bird.body.x,bird.body.y,bird.cfg);
   if(state==='flying'&&flyingBirds.length===0){ state='settling'; settleTimer=1.1; }
 }
 function checkPigs(){
@@ -814,6 +925,10 @@ function useAbility(){
     }
     if(t==='blue'){ splitBird(bird); return; }
     if(t==='bomb'){ explodeBird(bird); return; }
+    if(t==='matilda'){ dropEgg(bird); return; }
+    if(t==='hal'){ boomerang(bird); return; }
+    if(t==='pink'){ inflateBird(bird); return; }
+    // terence 无技能：纯质量碾压
   }
 }
 function splitBird(bird){
@@ -857,6 +972,60 @@ function explodeBird(bird){
   endBird(bird,'boom');
 }
 
+// ---- 白鸟：下蛋，蛋坠落撞击后小范围爆炸 ----
+function dropEgg(bird){
+  bird.abilityUsed=true;
+  const b=bird.body;
+  const egg={kind:'egg',age:0,dead:false};
+  egg.body=new Body('circle',b.x,b.y,{r:8,mass:3,restitution:0.3,friction:0.5,gameObj:egg});
+  egg.body.vx=b.vx*0.6; egg.body.vy=b.vy*0.6+150;   // 向下抛
+  bodies.push(egg.body);
+  sDrop();
+}
+function eggBoom(egg){
+  if(egg.dead) return;
+  egg.dead=true; egg.body.dead=true;
+  const bx=egg.body.x, by=egg.body.y, R=110;
+  for(const bd of bodies.slice()){
+    if(bd.dead||bd.isStatic||bd===egg.body) continue;
+    const dx=bd.x-bx, dy=bd.y-by, d=Math.hypot(dx,dy);
+    if(d<R){
+      const k=1-d/R, nx=dx/(d||1), ny=dy/(d||1);
+      bd.vx+=nx*k*420; bd.vy+=ny*k*420-k*120;
+      const go=bd.gameObj;
+      if(go&&go.hp){
+        go.hp-=k*300; go.flash=1;
+        if(go.hp<=0) destroyObj(go);
+      }
+    }
+  }
+  for(let i=0;i<16;i++){
+    const a=rand(0,Math.PI*2), sp=rand(80,320);
+    pushP({x:bx,y:by,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-80,size:rand(3,7),
+      color:['#ffd23e','#ff9e2e','#fff3c0'][randInt(0,2)],life:rand(0.3,0.6),max:0.6});
+  }
+  pushP({type:'ring',x:bx,y:by,size:5,vr:800,color:'rgba(255,230,150,0.9)',life:0.35,max:0.35});
+  flash=0.18; shake=9; sEggBoom();
+}
+// ---- 绿鸟：回旋折返，原路杀回 ----
+function boomerang(bird){
+  bird.abilityUsed=true;
+  const b=bird.body;
+  b.vx=-Math.max(Math.abs(b.vx)*1.15,450);   // 反向折返
+  b.vy=b.vy*0.7-100;
+  sBoomerang(); spawnStreak(b.x,b.y,Math.atan2(b.vy,b.vx));
+}
+// ---- 粉鸟：膨胀成气球上浮，弹开一路积木 ----
+function inflateBird(bird){
+  bird.abilityUsed=true;
+  bird.inflated=true;
+  const b=bird.body;
+  b.r=27; bird.r=27;
+  b.m=2.5; b.invM=1/2.5; b.invI=1/(2.5*27*27/2);
+  b.e=0.85; b.f=0.1;
+  b.vy-=250;
+  sInflate();
+}
 // ===================== 输入 =====================
 function toWorld(e){
   const r=cv.getBoundingClientRect();
@@ -941,7 +1110,7 @@ function renderLevelSelect(){
   html+='<div class="lvlbtn endless'+(progress.endless?'':' locked')+'" data-e="1">'
     +'<div class="n">'+(progress.endless?'∞':'🔒')+'</div>'
     +'<div class="s">&nbsp;</div>'
-    +'<div class="t">'+(progress.endless?('最高第 '+(progress.bestWave||0)+' 波'):'通关第 5 关解锁')+'</div>'
+    +'<div class="t">'+(progress.endless?('最高第 '+(progress.bestWave||0)+' 波'):('通关第 '+LEVELS.length+' 关解锁'))+'</div>'
     +'</div>';
   g.innerHTML=html;
 }
@@ -1146,12 +1315,22 @@ function drawBlockAt(g){
   }
   ctx.restore();
 }
+function drawEgg(x,y){
+  ctx.save(); ctx.translate(x,y);
+  ctx.fillStyle='#fdfcf4';
+  ctx.beginPath(); ctx.ellipse(0,0,7,9,0,0,7); ctx.fill();
+  ctx.strokeStyle='#c9c4ae'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.fillStyle='#e8e2c8';
+  ctx.beginPath(); ctx.arc(-2,-3,1.5,0,7); ctx.arc(2,2,1.2,0,7); ctx.fill();
+  ctx.restore();
+}
 function drawWorldBodies(){
   for(const b of bodies){
     if(b.isStatic||b.dead) continue;
     const g=b.gameObj; if(!g) continue;
     if(g.kind==='block') drawBlockAt(g);
     else if(g.kind==='pig'&&!g.dead) drawPigAt(b.x,b.y,g.r,g);
+    else if(g.kind==='egg') drawEgg(b.x,b.y);
     else if(g.kind==='bird'&&g.state==='flying') drawBirdAt(b.x,b.y,g.r,g.type,Math.atan2(b.vy,b.vx));
   }
 }
@@ -1254,6 +1433,10 @@ function frame(now){
       if(b.dead) continue;
       const sp=Math.hypot(b.vx,b.vy);
       if(sp<12) bird.stopFrames++; else bird.stopFrames=0;
+      if(bird.inflated){   // 气球鸟：4 秒或飘出屏幕后爆掉
+        bird.inflAge=(bird.inflAge||0)+dt;
+        if(bird.inflAge>4||b.y<-80){ endBird(bird,'pop'); continue; }
+      }
       // 落地慢速滚动也快速结束回合，不再等鸟慢慢滚停
       if(sp<160&&b.touching) bird.slowTouch=(bird.slowTouch||0)+1; else bird.slowTouch=0;
       if(bird.stopFrames>36||bird.slowTouch>15||bird.age>10||b.x>W+300||b.y>H+300||b.x<-500) endBird(bird,'stop');
@@ -1263,6 +1446,7 @@ function frame(now){
     for(const b of bodies){
       const g=b.gameObj;
       if(g&&g.flash) g.flash=Math.max(0,g.flash-dt*2.2);
+      if(g&&g.kind==='egg'){ g.age+=dt; if(g.age>6) b.dead=true; }   // 蛋超时消失
     }
     updateParticles(dt);
     for(const c of clouds){ c.x+=c.sp*dt; if(c.x>W+120) c.x=-120; }
