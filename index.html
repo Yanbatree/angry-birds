@@ -195,6 +195,7 @@ class Body{
 }
 const bodies=[];    // 世界中的物理体
 const impacts=[];   // 本帧碰撞记录（按配对去重）
+const anchors=new Map();   // 接触锚点（静摩擦锚定，键为 bodyId 对）
 
 function circleCircle(a,b){
   const dx=b.x-a.x, dy=b.y-a.y, d2=dx*dx+dy*dy, r=a.r+b.r;
@@ -232,6 +233,17 @@ function projectBox(b,ax){
   const cen=b.x*ax.x+b.y*ax.y;
   return {min:cen-r, max:cen+r};
 }
+function deepestVertex(box,dir){
+  const c=Math.cos(box.a), s=Math.sin(box.a), hw=box.w/2, hh=box.h/2;
+  let best=null, bd=-Infinity;
+  for(const ex of [-1,1]) for(const ey of [-1,1]){
+    const vx=box.x+ex*c*hw+ey*(-s)*hh;
+    const vy=box.y+ex*s*hw+ey*c*hh;
+    const d=vx*dir.x+vy*dir.y;
+    if(d>bd){ bd=d; best={x:vx,y:vy}; }
+  }
+  return best;
+}
 function boxBox(a,b){
   const cosA=Math.cos(a.a), sinA=Math.sin(a.a);
   const cosB=Math.cos(b.a), sinB=Math.sin(b.a);
@@ -245,15 +257,51 @@ function boxBox(a,b){
     const nx=dcen>=0?ax.x:-ax.x, ny=dcen>=0?ax.y:-ax.y;
     if(ov<minDepth){ minDepth=ov; best={nx,ny,depth:ov,ax}; }
   }
-  // 接触流形：在切线方向的重叠区间两端各取一个接触点，
-  // 双接触点使堆叠力矩平衡，避免单点接触导致的旋转能量积累
-  const ax=best.ax, tx=-ax.y, ty=ax.x;
-  const paT=projectBox(a,{x:tx,y:ty}), pbT=projectBox(b,{x:tx,y:ty});
-  const t1=Math.max(paT.min,pbT.min), t2=Math.min(paT.max,pbT.max);
-  const paN=projectBox(a,{x:best.nx,y:best.ny}), pbN=projectBox(b,{x:best.nx,y:best.ny});
-  const nMid=(Math.max(paN.min,pbN.min)+Math.min(paN.max,pbN.max))/2;
-  best.pts=[{x:tx*t1+best.nx*nMid, y:ty*t1+best.ny*nMid}];
-  if(t2-t1>1) best.pts.push({x:tx*t2+best.nx*nMid, y:ty*t2+best.ny*nMid});
+  const n={x:best.nx,y:best.ny};
+  // 各箱最接近给定法线的面
+  const faceOf=(box,dir)=>{
+    const c=Math.cos(box.a), s=Math.sin(box.a);
+    const cands=[
+      {n:{x:c,y:s},t:{x:-s,y:c},hw:box.w/2,hh:box.h/2},
+      {n:{x:-c,y:-s},t:{x:s,y:-c},hw:box.w/2,hh:box.h/2},
+      {n:{x:-s,y:c},t:{x:-c,y:-s},hw:box.h/2,hh:box.w/2},
+      {n:{x:s,y:-c},t:{x:c,y:s},hw:box.h/2,hh:box.w/2}];
+    let bf=null, bd=-2;
+    for(const f of cands){
+      const d=f.n.x*dir.x+f.n.y*dir.y;
+      if(d>bd){ bd=d; bf=f; }
+    }
+    return bf;
+  };
+  // 真实接触面裁剪：把 B 的接触面端点按"距离 A 面 ≤ 接触带"裁剪。
+  // 平放的面 → 两端都在带内 → 双接触点（堆叠稳定）；
+  // 倾斜的角 → 只有角在带内 → 单接触点（力臂正确，必然翻倒）。
+  // 绝不用投影中点制造虚假支撑面（那会让倾斜结构冻结不倒）
+  const fa=faceOf(a,n), fb=faceOf(b,{x:-n.x,y:-n.y});
+  const ca={x:a.x+fa.n.x*fa.hw, y:a.y+fa.n.y*fa.hw};
+  const cb={x:b.x+fb.n.x*fb.hw, y:b.y+fb.n.y*fb.hw};
+  const e1={x:cb.x+fb.t.x*fb.hh, y:cb.y+fb.t.y*fb.hh};
+  const e2={x:cb.x-fb.t.x*fb.hh, y:cb.y-fb.t.y*fb.hh};
+  const d1=(e1.x-ca.x)*n.x+(e1.y-ca.y)*n.y;   // 端点到 A 面的有向距离
+  const d2=(e2.x-ca.x)*n.x+(e2.y-ca.y)*n.y;
+  const SLOP=0.6;
+  let q1=e1, q2=e2;
+  if(d1>SLOP&&d2>SLOP){
+    // 面面几乎无重叠（罕见）：退回最深顶点
+    const v=deepestVertex(b,{x:-n.x,y:-n.y});
+    q1=q2=v;
+  }else{
+    if(d1>SLOP){
+      const t=(d1-SLOP)/(d1-d2);
+      q1={x:e1.x+(e2.x-e1.x)*t, y:e1.y+(e2.y-e1.y)*t};
+    }
+    if(d2>SLOP){
+      const t=(d2-SLOP)/(d2-d1);
+      q2={x:e2.x+(e1.x-e2.x)*t, y:e2.y+(e1.y-e2.y)*t};
+    }
+  }
+  best.pts=[q1];
+  if(Math.hypot(q2.x-q1.x,q2.y-q1.y)>1) best.pts.push(q2);
   best.pt=best.pts[0];
   return best;
 }
@@ -273,16 +321,35 @@ function record(A,B,j,pt,vn=0,nx=0,ny=0){
   if(j>im.j) im.j=j;
   if(Math.abs(vn)>Math.abs(im.vn)) im.vn=vn;
 }
-function resolvePair(A,B){
+function resolvePair(A,B,phase){
   if(A.isStatic&&B.isStatic) return;
   const res=collide(A,B); if(!res) return;
   const {nx,ny}=res, depth=res.depth;
   if(depth>0.01){ A.touching=true; B.touching=true; }
+  A.cnx=nx; A.cny=ny; B.cnx=-nx; B.cny=-ny;   // 记录接触法线（静摩擦用）
   const inv=A.invM+B.invM; if(inv<=0) return;
-  // 位置修正（带松弛）——整对只做一次
-  const corr=Math.max(depth-0.5,0)/inv*0.6;
-  A.x-=nx*corr*A.invM; A.y-=ny*corr*A.invM;
-  B.x+=nx*corr*B.invM; B.y+=ny*corr*B.invM;
+  if(phase===0){
+    // 位置修正（带松弛）——每对每子步只做一次，避免每迭代重复修正注入漂移
+    const corr=Math.max(depth-0.5,0)/inv*0.6;
+    A.x-=nx*corr*A.invM; A.y-=ny*corr*A.invM;
+    B.x+=nx*corr*B.invM; B.y+=ny*corr*B.invM;
+    // 接触锚定（静摩擦）：静止接触的微观漂移拉回锚点，
+    // 真实滑动/撞击则重新锚定——消除"缓慢爬行"，又不冻结倒塌
+    const key=A.id<B.id? A.id+'-'+B.id : B.id+'-'+A.id;
+    const pt=res.pt;
+    const vnx=(B.vx-A.vx)*nx+(B.vy-A.vy)*ny;
+    const an=anchors.get(key);
+    if(an&&Math.abs(vnx)<=60&&Math.hypot(pt.x-an.x,pt.y-an.y)<=0.05){
+      const dx=pt.x-an.x, dy=pt.y-an.y;
+      const w=A.invM/inv;
+      A.x-=dx*w; A.y-=dy*w;
+      B.x-=dx*(1-w); B.y-=dy*(1-w);
+    }else{
+      anchors.set(key,{x:pt.x,y:pt.y});
+    }
+    return;
+  }
+  // phase 1：冲量解算（在迭代内进行）
   const e=Math.max(A.e,B.e);
   const pts=res.pts||[res.pt];
   // 双接触点（盒盒碰撞）：耦合求解法向冲量，同时满足两点速度约束，
@@ -385,8 +452,6 @@ function physicsStep(dt){
     const go=b.gameObj;
     if(go&&go.kind==='bird'&&go.state!=='flying') continue;  // 弹弓上的鸟不受重力
     const sp=Math.abs(b.vx)+Math.abs(b.vy);
-    // 静止线速度微阻尼只作用于"接触中"的物体，且绝不清零角速度——
-    // 倾斜物体只要有重力扭矩就会继续旋转倒下，不会被"停转阈值"冻结
     if(b.touching&&sp<2.5){ b.vx=0; b.vy=0; }
     b.va*=0.985;   // 角速度阻尼：翻滚自然衰减，但不会把人造倾角锁死
     if(b.touching) b.va*=0.94;   // 接触中强阻尼：镇住堆叠微晃（倾斜物体扭矩仍会累积倒下）
@@ -396,11 +461,28 @@ function physicsStep(dt){
     }
     const gravScale=(go&&go.kind==='bird'&&go.inflated)?-0.2:1;   // 气球鸟上浮
     b.vy+=GRAVITY*dt*gravScale;
+    // 静摩擦：接触中的物体，若切向速度很小则完全咬合（斜面不再缓慢爬行）
+    if(b.touching&&b.cnx!==undefined){
+      const tx=-b.cny, ty=b.cnx;
+      const vt=b.vx*tx+b.vy*ty;
+      if(Math.abs(vt)<40){ b.vx-=vt*tx; b.vy-=vt*ty; }
+    }
     if(!(go&&go.kind==='bird')) b.vx*=0.9995;   // 鸟无空气阻力，弹道与预览完全一致
     b.x+=b.vx*dt; b.y+=b.vy*dt; b.a+=b.va*dt;
     b.touching=false;
   }
   impacts.length=0;
+  // 位置修正：每对每子步一次
+  for(let i=0;i<bodies.length;i++){
+    const A=bodies[i]; if(A.dead) continue;
+    for(let j=i+1;j<bodies.length;j++){
+      const B=bodies[j]; if(B.dead) continue;
+      const goA=A.gameObj, goB=B.gameObj;
+      if((goA&&goA.kind==='bird'&&goA.state!=='flying')||(goB&&goB.kind==='bird'&&goB.state!=='flying')) continue;
+      resolvePair(A,B,0);
+    }
+  }
+  // 冲量迭代：只解速度
   for(let it=0;it<ITER;it++){
     for(let i=0;i<bodies.length;i++){
       const A=bodies[i]; if(A.dead) continue;
@@ -408,7 +490,7 @@ function physicsStep(dt){
         const B=bodies[j]; if(B.dead) continue;
         const goA=A.gameObj, goB=B.gameObj;
         if((goA&&goA.kind==='bird'&&goA.state!=='flying')||(goB&&goB.kind==='bird'&&goB.state!=='flying')) continue;
-        resolvePair(A,B);
+        resolvePair(A,B,1);
       }
     }
   }
@@ -681,8 +763,8 @@ const LEVELS=[
    }},
   {name:'第 8 关 · 天空要塞', birds:['terence','hal','matilda','blue','bomb','chuck'],
    build(){
-     wb.block('stone',800,GROUND_Y-65,20,130);     // 石柱
-     wb.block('stone',980,GROUND_Y-65,20,130);
+     wb.block('stone',800,GROUND_Y-65,40,130);     // 加宽石柱：消除木板悬臂微倾
+     wb.block('stone',980,GROUND_Y-65,40,130);
      wb.block('wood',890,GROUND_Y-138,240,16);     // 一层平台
      wb.block('wood',840,GROUND_Y-181,14,70);      // 二层木柱
      wb.block('wood',940,GROUND_Y-181,14,70);
