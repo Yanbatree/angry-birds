@@ -322,9 +322,15 @@ function resolvePair(A,B){
     B.vx+=jt*tx*B.invM; B.vy+=jt*ty*B.invM; B.va+=jt*rt2*B.invI;
   }
 }
-function kTable(victim,attacker){
-  if(attacker==='bird') return victim==='pig'?0.14:0.05;
-  if(attacker==='block') return victim==='pig'?0.10:0.04;
+function kTable(victim,attacker,vtype){
+  if(attacker==='bird'){
+    if(victim==='pig') return 0.14;
+    if(victim==='block') return vtype==='stone'?0.04:0.075;   // 木头/玻璃一撞就碎，石头耐撞
+  }
+  if(attacker==='block'){
+    if(victim==='pig') return 0.10;
+    if(victim==='block') return vtype==='stone'?0.035:(vtype==='glass'?0.07:0.06);
+  }
   if(attacker==='pig') return victim==='pig'?0.08:0.04;
   return 0;
 }
@@ -383,9 +389,9 @@ const BIRD_CFG={
   bomb: {body:'#383b40',shade:'#26282c',belly:'#9aa0a8',beak:'#f5c242',tail:'#232323',r:17},
 };
 const BLOCK_DEF={
-  wood: {fill:'#c98d4e',edge:'#8a5a2b',line:'#a9742f',dens:0.006,hpk:13},
+  wood: {fill:'#c98d4e',edge:'#8a5a2b',line:'#a9742f',dens:0.006,hpk:10},
   stone:{fill:'#9aa2ab',edge:'#6a7078',line:'#7e868f',dens:0.014,hpk:8.5},
-  glass:{fill:'rgba(158,208,255,0.55)',edge:'rgba(255,255,255,0.85)',line:'rgba(255,255,255,0.7)',dens:0.0035,hpk:16},
+  glass:{fill:'rgba(158,208,255,0.55)',edge:'rgba(255,255,255,0.85)',line:'rgba(255,255,255,0.7)',dens:0.0035,hpk:14},
 };
 function makeBird(type,x,y){
   const cfg=BIRD_CFG[type];
@@ -420,7 +426,7 @@ function damageObj(g,other,j,vn){
   if(!g||!g.hp||g.hp<=0||g.dead) return;
   let dmg=0;
   if(other){
-    const k=kTable(g.kind, other.kind);
+    const k=kTable(g.kind, other.kind, g.btype);
     if(k) dmg=j*k;
   }else if(g.kind==='pig'&&Math.abs(vn)>160){
     // 摔到地面：高处坠落按撞击速度扣血（原版机制，坠落也会摔死）
