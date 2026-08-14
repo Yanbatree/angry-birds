@@ -384,11 +384,12 @@ function physicsStep(dt){
     if(b.isStatic||b.dead) continue;
     const go=b.gameObj;
     if(go&&go.kind==='bird'&&go.state!=='flying') continue;  // 弹弓上的鸟不受重力
-    // 低速清零：只清速度、不冻结位置——重力始终生效，失去支撑必然下落
     const sp=Math.abs(b.vx)+Math.abs(b.vy);
-    if(sp<2.5){ b.vx=0; b.vy=0; }
-    if(Math.abs(b.va)<0.01) b.va=0;
-    b.va*=0.985;   // 角速度阻尼：抑制窄柱摇摆累积，也让翻滚碎块自然停转
+    // 静止线速度微阻尼只作用于"接触中"的物体，且绝不清零角速度——
+    // 倾斜物体只要有重力扭矩就会继续旋转倒下，不会被"停转阈值"冻结
+    if(b.touching&&sp<2.5){ b.vx=0; b.vy=0; }
+    b.va*=0.985;   // 角速度阻尼：翻滚自然衰减，但不会把人造倾角锁死
+    if(b.touching) b.va*=0.94;   // 接触中强阻尼：镇住堆叠微晃（倾斜物体扭矩仍会累积倒下）
     // 圆形滚动阻力：纯滚动没有切向摩擦，不加阻力会无限滚下去
     if(b.type==='circle'&&b.touching){
       b.vx*=0.988; b.vy*=0.988;
@@ -669,7 +670,7 @@ const LEVELS=[
      wb.block('glass',910,GROUND_Y-132,44,44);
      wb.block('glass',910,GROUND_Y-176,44,44);
      wb.pig(910,GROUND_Y-212,14);
-     wb.block('wood',1040,GROUND_Y-50,16,90);      // 塔C（三层玻璃）
+     wb.block('wood',1040,GROUND_Y-45,16,90);      // 塔C（三层玻璃）
      wb.block('glass',1040,GROUND_Y-112,44,44);
      wb.block('glass',1040,GROUND_Y-152,36,36);
      wb.block('glass',1040,GROUND_Y-188,36,36);
@@ -706,8 +707,8 @@ const LEVELS=[
      wb.pig(910,GROUND_Y-252,14);
      wb.block('glass',790,GROUND_Y-200,44,44);     // 石顶玻璃
      wb.block('glass',1030,GROUND_Y-200,44,44);
-     wb.block('wood',840,GROUND_Y-40,14,80);       // 前哨
-     wb.block('wood',980,GROUND_Y-40,14,80);
+     wb.block('wood',825,GROUND_Y-40,14,80);       // 前哨（避开地面小猪）
+     wb.block('wood',995,GROUND_Y-40,14,80);
      wb.block('wood',910,GROUND_Y-88,200,16);
      wb.pig(910,GROUND_Y-110,14);
      wb.block('glass',870,GROUND_Y-116,40,40);
